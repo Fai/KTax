@@ -9,6 +9,7 @@ func CalculateTax(totalIncome, wht float64, allowances []Allowance) (float64, er
 	totalAllowance := 60000.0
 	grossIncome := totalIncome - totalAllowance
 	totalTax := 0.0
+
 	if grossIncome <= 150000 {
 		return totalTax, nil
 	}
