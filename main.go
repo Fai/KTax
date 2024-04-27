@@ -64,6 +64,16 @@ type TaxRefund struct {
 	Refund float64 `json:"taxRefund"`
 }
 
+type TaxLevelDetail struct {
+	Level string  `json:"level"`
+	Tax   float64 `json:"tax"`
+}
+
+type DetailedTaxResult struct {
+	Tax    float64          `json:"tax"`
+	Levels []TaxLevelDetail `json:"levels"`
+}
+
 // TaxCalculationsHandler
 //
 //	@Summary		Handles tax calculation
@@ -76,15 +86,19 @@ type TaxRefund struct {
 //	@Router			/tax/calculations [post]
 func TaxCalculationsHandler(c echo.Context) error {
 	var i IncomeStatement
+	var taxLevelToggle = os.Getenv("TAX_LEVEL_TOGGLE") == "true"
 	err := c.Bind(&i)
 	fmt.Println(i)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
 	}
-	calculatedTax, err := CalculateTax(i.TotalIncome, i.Wht, i.Allowances)
+	calculatedTax, err := CalculateTotalTax(i.TotalIncome, i.Wht, i.Allowances)
 	if calculatedTax < 0 {
 		calculatedTax *= -1
 		return c.JSON(http.StatusOK, TaxRefund{Refund: calculatedTax})
+	}
+	if taxLevelToggle == true {
+		return c.JSON(http.StatusOK, DetailedTaxResult{Tax: calculatedTax, Levels: CalculateTaxLevel(calculatedTax, i.Wht)})
 	}
 	return c.JSON(http.StatusOK, TaxResult{Tax: calculatedTax})
 }
@@ -102,7 +116,39 @@ func CalculateAllowance(allowances []Allowance) float64 {
 	return calculatedAllowance
 }
 
-func CalculateTax(totalIncome, wht float64, allowances []Allowance) (float64, error) {
+func CalculateTaxLevel(tax float64, wht float64) []TaxLevelDetail {
+	var CalculatedTaxLevels []TaxLevelDetail
+	CalculatedTaxLevels = []TaxLevelDetail{
+		{"0-150,000", 0.0},
+		{"150,001-500,000", 0.0},
+		{"500,001-1,000,000", 0.0},
+		{"1,000,001-2,000,000", 0.0},
+		{"2,000,001 ขึ้นไป", 0.0},
+	}
+	base := tax + wht
+	if base <= 35000.0 {
+		CalculatedTaxLevels[1].Tax = base
+		return CalculatedTaxLevels
+	}
+	CalculatedTaxLevels[1].Tax = 35000.0
+	base -= 35000.0
+	if base <= 75000.0 {
+		CalculatedTaxLevels[2].Tax = base
+		return CalculatedTaxLevels
+	}
+	CalculatedTaxLevels[2].Tax = 75000.0
+	base -= 75000.0
+	if base <= 200000.0 {
+		CalculatedTaxLevels[3].Tax = base
+		return CalculatedTaxLevels
+	}
+	CalculatedTaxLevels[3].Tax = 200000.0
+	base -= 200000.0
+	CalculatedTaxLevels[4].Tax = base
+	return CalculatedTaxLevels
+}
+
+func CalculateTotalTax(totalIncome float64, wht float64, allowances []Allowance) (float64, error) {
 	totalAllowance := 60000.0 + CalculateAllowance(allowances)
 	grossIncome := totalIncome - totalAllowance
 	totalTax := 0.0

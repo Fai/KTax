@@ -58,7 +58,7 @@ func TestCalculateTax(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tax, err := CalculateTax(tc.totalIncome, tc.wht, tc.allowances)
+		tax, err := CalculateTotalTax(tc.totalIncome, tc.wht, tc.allowances)
 		if err != nil {
 			t.Fatalf("CalculateTax failed with error: %v", err)
 		}
