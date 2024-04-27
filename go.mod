@@ -4,6 +4,7 @@ go 1.21.9
 
 require (
 	github.com/labstack/echo/v4 v4.11.4
+	github.com/lib/pq v1.10.9
 	github.com/stretchr/testify v1.8.4
 )
 
