@@ -81,8 +81,21 @@ func TaxCalculationsHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, TaxResult{Tax: calculatedTax})
 }
 
+func CalculateAllowance(allowances []Allowance) float64 {
+	calculatedAllowance := 0.0
+	for _, allowance := range allowances {
+		if allowance.AllowanceType == "donation" {
+			calculatedAllowance += allowance.Amount
+		}
+	}
+	if calculatedAllowance > 100000 {
+		calculatedAllowance = 100000
+	}
+	return calculatedAllowance
+}
+
 func CalculateTax(totalIncome, wht float64, allowances []Allowance) (float64, error) {
-	totalAllowance := 60000.0
+	totalAllowance := 60000.0 + CalculateAllowance(allowances)
 	grossIncome := totalIncome - totalAllowance
 	totalTax := 0.0
 
