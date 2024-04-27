@@ -23,6 +23,8 @@ func TestHealthCheck(t *testing.T) {
 
 func TestTaxCalculationsRoute(t *testing.T) {
 	e := echo.New()
+	state := TaxLevelToggle
+	TaxLevelToggle = false
 	req := httptest.NewRequest(http.MethodPost, "/tax/calculations", strings.NewReader(`{"totalIncome": 1000000, "wht": 0, "allowances": []}`))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
@@ -32,6 +34,7 @@ func TestTaxCalculationsRoute(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 		assert.Equal(t, "{\"tax\":101000}\n", rec.Body.String())
 	}
+	TaxLevelToggle = state
 }
 
 func TestCalculateTax(t *testing.T) {
@@ -58,7 +61,7 @@ func TestCalculateTax(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tax, err := CalculateTax(tc.totalIncome, tc.wht, tc.allowances)
+		tax, err := CalculateTotalTax(tc.totalIncome, tc.wht, tc.allowances)
 		if err != nil {
 			t.Fatalf("CalculateTax failed with error: %v", err)
 		}
