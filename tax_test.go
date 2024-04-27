@@ -13,6 +13,7 @@ func TestCalculateTax(t *testing.T) {
 	}
 
 	testCases := []testCase{
+
 		{150000.0, 0.0, []Allowance{}, 0.0},
 		{210000.0, 0.0, []Allowance{}, 0.0},
 		{330000.0, 0.0, []Allowance{}, 12000.00},
