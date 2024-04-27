@@ -60,6 +60,10 @@ type TaxResult struct {
 	Tax float64 `json:"tax"`
 }
 
+type TaxRefund struct {
+	Refund float64 `json:"taxRefund"`
+}
+
 // TaxCalculationsHandler
 //
 //	@Summary		Handles tax calculation
@@ -78,6 +82,10 @@ func TaxCalculationsHandler(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
 	}
 	calculatedTax, err := CalculateTax(i.TotalIncome, i.Wht, i.Allowances)
+	if calculatedTax < 0 {
+		calculatedTax *= -1
+		return c.JSON(http.StatusOK, TaxRefund{Refund: calculatedTax})
+	}
 	return c.JSON(http.StatusOK, TaxResult{Tax: calculatedTax})
 }
 
