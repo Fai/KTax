@@ -93,6 +93,7 @@ func CalculateTax(totalIncome, wht float64, allowances []Allowance) (float64, er
 
 	if grossIncome <= 350000 {
 		totalTax += grossIncome * 0.1
+		totalTax -= wht
 		return totalTax, nil
 	}
 	totalTax += 350000 * 0.1
@@ -100,6 +101,7 @@ func CalculateTax(totalIncome, wht float64, allowances []Allowance) (float64, er
 
 	if grossIncome <= 500000 {
 		totalTax += grossIncome * 0.15
+		totalTax -= wht
 		return totalTax, nil
 	}
 	totalTax += 500000 * 0.15
@@ -107,11 +109,13 @@ func CalculateTax(totalIncome, wht float64, allowances []Allowance) (float64, er
 
 	if grossIncome <= 1000000 {
 		totalTax += grossIncome * 0.2
+		totalTax -= wht
 		return totalTax, nil
 	}
 	totalTax += 1000000 * 0.2
 	grossIncome -= 1000000
 
 	totalTax += grossIncome * 0.35
+	totalTax -= wht
 	return totalTax, nil
 }

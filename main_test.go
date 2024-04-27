@@ -53,6 +53,8 @@ func TestCalculateTax(t *testing.T) {
 		{2000000.0, 0.0, []Allowance{}, 298000.00},
 		{2060000.0, 0.0, []Allowance{}, 310000.0},
 		{10000000.0, 0.0, []Allowance{}, 3089000.00},
+
+		{500000.0, 25000.0, []Allowance{}, 4000.0},
 	}
 
 	for _, tc := range testCases {
