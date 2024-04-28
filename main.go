@@ -71,7 +71,6 @@ type DetailedTaxResult struct {
 func TaxCalculationsHandler(c echo.Context) error {
 	var i IncomeStatement
 	err := c.Bind(&i)
-	fmt.Println(i)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
 	}
@@ -87,16 +86,26 @@ func TaxCalculationsHandler(c echo.Context) error {
 }
 
 func CalculateAllowance(allowances []Allowance) float64 {
-	calculatedAllowance := 0.0
+	donationAllowance := 0.0
+	kReceiptAllowance := 0.0
 	for _, allowance := range allowances {
+		if allowance.Amount < 0 {
+
+		}
 		if allowance.AllowanceType == "donation" {
-			calculatedAllowance += allowance.Amount
+			donationAllowance += allowance.Amount
+		}
+		if allowance.AllowanceType == "k-receipt" {
+			kReceiptAllowance += allowance.Amount
 		}
 	}
-	if calculatedAllowance > 100000 {
-		calculatedAllowance = 100000
+	if donationAllowance > 100000 {
+		donationAllowance = 100000
 	}
-	return calculatedAllowance
+	if kReceiptAllowance > KReceiptDeductionLimit {
+		kReceiptAllowance = KReceiptDeductionLimit
+	}
+	return donationAllowance + kReceiptAllowance
 }
 
 func CalculateTaxLevel(tax float64, wht float64) []TaxLevelDetail {
@@ -255,7 +264,6 @@ func CSVTaxCalculationsHandler(c echo.Context) error {
 		} else {
 			csvResult = append(csvResult, CSVTaxResult{TotalIncome: totalIncome, Tax: calculatedTax})
 		}
-		fmt.Println(csvResult)
 	}
 
 	return c.JSON(http.StatusOK, csvResult)
@@ -269,15 +277,15 @@ func AuthMiddleware(username, password string, c echo.Context) (bool, error) {
 }
 
 var PersonalDeduction float64
-var KReceiptDeduction float64
+var KReceiptDeductionLimit float64
 
 func loadDeductions() error {
 	row := db.QueryRow("SELECT personal, kreceipt FROM deductions ORDER BY id DESC LIMIT 1")
-	err := row.Scan(&PersonalDeduction, &KReceiptDeduction)
+	err := row.Scan(&PersonalDeduction, &KReceiptDeductionLimit)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			PersonalDeduction = 60000.0
-			KReceiptDeduction = 0.0
+			KReceiptDeductionLimit = 50000.0
 		} else {
 			return err
 		}
