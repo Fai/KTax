@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/csv"
 	"fmt"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 )
@@ -204,6 +206,44 @@ func KReceiptDeductionsHandler(c echo.Context) error {
 }
 
 func CSVTaxCalculationsHandler(c echo.Context) error {
+	file, err := c.FormFile("file")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
+	}
+
+	// Open the file
+	src, err := file.Open()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
+	}
+	defer src.Close()
+
+	// Read the file as a CSV
+	reader := csv.NewReader(src)
+	records, err := reader.ReadAll()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
+	}
+
+	// Process each row
+	var results []TaxResult
+	for _, record := range records {
+		totalIncome, err := strconv.ParseFloat(record[0], 64)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
+		}
+		wht, err := strconv.ParseFloat(record[1], 64)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
+		}
+		calculatedTax, err := CalculateTotalTax(totalIncome, wht, nil)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
+		}
+		results = append(results, TaxResult{Tax: calculatedTax})
+	}
+
+	// Return the results
 	return c.JSON(http.StatusOK, "Tax Calculations from CSV file")
 }
 
