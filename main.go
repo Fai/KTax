@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/csv"
 	"fmt"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 )
@@ -204,7 +206,58 @@ func KReceiptDeductionsHandler(c echo.Context) error {
 }
 
 func CSVTaxCalculationsHandler(c echo.Context) error {
-	return c.JSON(http.StatusOK, "Tax Calculations from CSV file")
+	file, err := c.FormFile("file")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
+	}
+
+	src, err := file.Open()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
+	}
+	defer src.Close()
+
+	reader := csv.NewReader(src)
+	taxRecords, err := reader.ReadAll()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
+	}
+	taxRecords = taxRecords[1:]
+
+	var csvResult []map[string]interface {
+	}
+	var csvA []Allowance
+	for _, taxRecord := range taxRecords {
+		totalIncome, err := strconv.ParseFloat(taxRecord[0], 64)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
+		}
+		result := map[string]interface{}{
+			"totalIncome": totalIncome,
+		}
+		wht, err := strconv.ParseFloat(taxRecord[1], 64)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
+		}
+		donation, err := strconv.ParseFloat(taxRecord[2], 64)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
+		}
+		csvA = append(csvA, Allowance{AllowanceType: "donation", Amount: donation})
+		calculatedTax, err := CalculateTotalTax(totalIncome, wht, csvA)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
+		}
+		if calculatedTax < 0 {
+			calculatedTax *= -1
+			result["taxRefund"] = calculatedTax
+		} else {
+			result["tax"] = calculatedTax
+		}
+		csvResult = append(csvResult, result)
+	}
+
+	return c.JSON(http.StatusOK, csvResult)
 }
 
 func AuthMiddleware(username, password string, c echo.Context) (bool, error) {
