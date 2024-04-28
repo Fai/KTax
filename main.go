@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
+	_ "github.com/lib/pq"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,30 +17,7 @@ import (
 
 var TaxLevelToggle bool = true
 
-func main() {
-	port := os.Getenv("PORT")
-	e := echo.New()
-	e.Logger.SetLevel(log.INFO)
-
-	e.GET("/", HealthCheckHandler)
-	e.POST("/tax/calculations", TaxCalculationsHandler)
-
-	go func() {
-		if err := e.Start(":" + port); err != nil && err != http.ErrServerClosed {
-			e.Logger.Fatal("shutting down the server")
-		}
-	}()
-
-	shutdown := make(chan os.Signal, 1)
-	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
-	<-shutdown
-	fmt.Println("\nshutting down the server")
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := e.Shutdown(ctx); err != nil {
-		e.Logger.Fatal(err)
-	}
-}
+var db *sql.DB
 
 func HealthCheckHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, "Hello, Go Bootcamp!")
@@ -186,4 +166,68 @@ func CalculateTotalTax(totalIncome float64, wht float64, allowances []Allowance)
 	totalTax += grossIncome * 0.35
 	totalTax -= wht
 	return totalTax, nil
+}
+
+func PersonalDeductionsHandler(c echo.Context) error {
+	return c.JSON(http.StatusOK, "Personal Deductions Adjustment")
+}
+
+func KReceiptDeductionsHandler(c echo.Context) error {
+	return c.JSON(http.StatusOK, "K-Receipt Deductions Adjustment")
+}
+
+func CSVTaxCalculationsHandler(c echo.Context) error {
+	return c.JSON(http.StatusOK, "Tax Calculations from CSV file")
+}
+
+func AuthMiddleware(username, password string, c echo.Context) (bool, error) {
+	if username == os.Getenv("ADMIN_USERNAME") && password == os.Getenv("ADMIN_PASSWORD") {
+		return true, nil
+	}
+	return false, nil
+}
+
+func main() {
+
+	var err error
+	db, err = sql.Open("postgres", os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Fatal("Connect to database error", err)
+	}
+	defer db.Close()
+
+	port := os.Getenv("PORT")
+
+	e := echo.New()
+	e.Use(middleware.Logger())
+	e.Use(middleware.Recover())
+	e.Logger.SetLevel(log.INFO)
+
+	e.GET("/", HealthCheckHandler)
+
+	t := e.Group("/tax/calculations")
+	t.POST("/", TaxCalculationsHandler)
+	t.POST("/upload-csv", CSVTaxCalculationsHandler)
+
+	ad := e.Group("/admin/deductions")
+	ad.Use(middleware.BasicAuth(AuthMiddleware))
+	ad.POST("/personal", PersonalDeductionsHandler)
+	ad.POST("/k-receipt", KReceiptDeductionsHandler)
+
+	go func() {
+		if err := e.Start(":" + port); err != nil && err != http.ErrServerClosed {
+			e.Logger.Fatal("shutting down the server")
+		}
+	}()
+
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+
+	<-shutdown
+	fmt.Println("\nshutting down the server")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := e.Shutdown(ctx); err != nil {
+		e.Logger.Fatal(err)
+	}
 }
