@@ -205,6 +205,12 @@ func KReceiptDeductionsHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, "K-Receipt Deductions Adjustment")
 }
 
+type CSVTaxResult struct {
+	TotalIncome float64 `json:"totalIncome"`
+	Tax         float64 `json:"tax,omitempty"`
+	TaxRefund   float64 `json:"taxRefund,omitempty"`
+}
+
 func CSVTaxCalculationsHandler(c echo.Context) error {
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -224,16 +230,12 @@ func CSVTaxCalculationsHandler(c echo.Context) error {
 	}
 	taxRecords = taxRecords[1:]
 
-	var csvResult []map[string]interface {
-	}
+	var csvResult []CSVTaxResult
 	var csvA []Allowance
 	for _, taxRecord := range taxRecords {
 		totalIncome, err := strconv.ParseFloat(taxRecord[0], 64)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
-		}
-		result := map[string]interface{}{
-			"totalIncome": totalIncome,
 		}
 		wht, err := strconv.ParseFloat(taxRecord[1], 64)
 		if err != nil {
@@ -249,12 +251,11 @@ func CSVTaxCalculationsHandler(c echo.Context) error {
 			return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
 		}
 		if calculatedTax < 0 {
-			calculatedTax *= -1
-			result["taxRefund"] = calculatedTax
+			csvResult = append(csvResult, CSVTaxResult{TotalIncome: totalIncome, TaxRefund: calculatedTax * -1})
 		} else {
-			result["tax"] = calculatedTax
+			csvResult = append(csvResult, CSVTaxResult{TotalIncome: totalIncome, Tax: calculatedTax})
 		}
-		csvResult = append(csvResult, result)
+		fmt.Println(csvResult)
 	}
 
 	return c.JSON(http.StatusOK, csvResult)
