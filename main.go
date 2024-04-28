@@ -185,6 +185,9 @@ func PersonalDeductionsHandler(c echo.Context) error {
 	if d.Amount > 100000 {
 		return c.JSON(http.StatusBadRequest, Err{Message: "Personal deduction must not exceed 100,000"})
 	}
+	if d.Amount < 0 {
+		return c.JSON(http.StatusBadRequest, Err{Message: "Personal deduction must not be negative"})
+	}
 
 	PersonalDeduction = d.Amount
 
