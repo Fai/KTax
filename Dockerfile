@@ -14,4 +14,5 @@ WORKDIR /root/
 COPY --from=builder /app/k-tax .
 EXPOSE 8080
 ENV PORT=8080
+ENV DATABASE_URL="host=localhost port=5432 user=postgres password=postgres dbname=ktaxes sslmode=disable"
 CMD ["./k-tax"]

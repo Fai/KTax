@@ -168,8 +168,29 @@ func CalculateTotalTax(totalIncome float64, wht float64, allowances []Allowance)
 	return totalTax, nil
 }
 
+type Deduction struct {
+	Amount float64 `json:"amount"`
+}
+
+type PersonalResponse struct {
+	PersonalDeduction float64 `json:"personalDeduction"`
+}
+
 func PersonalDeductionsHandler(c echo.Context) error {
-	return c.JSON(http.StatusOK, "Personal Deductions Adjustment")
+	var d Deduction
+	err := c.Bind(&d)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
+	}
+
+	PersonalDeduction = d.Amount
+
+	_, err = db.Exec("UPDATE deductions SET personal = $1 WHERE id = (SELECT MAX(id) FROM deductions)", PersonalDeduction)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, PersonalResponse{PersonalDeduction: PersonalDeduction})
 }
 
 func KReceiptDeductionsHandler(c echo.Context) error {
@@ -187,6 +208,23 @@ func AuthMiddleware(username, password string, c echo.Context) (bool, error) {
 	return false, nil
 }
 
+var PersonalDeduction float64
+var KReceiptDeduction float64
+
+func loadDeductions() error {
+	row := db.QueryRow("SELECT personal, kreceipt FROM deductions ORDER BY id DESC LIMIT 1")
+	err := row.Scan(&PersonalDeduction, &KReceiptDeduction)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			PersonalDeduction = 60000.0
+			KReceiptDeduction = 0.0
+		} else {
+			return err
+		}
+	}
+	return nil
+}
+
 func main() {
 
 	var err error
@@ -196,7 +234,23 @@ func main() {
 	}
 	defer db.Close()
 
-	port := os.Getenv("PORT")
+	createTb := `
+		CREATE TABLE IF NOT EXISTS deductions (
+			id SERIAL PRIMARY KEY,
+			personal FLOAT,
+			kreceipt FLOAT
+		);
+	`
+
+	_, err = db.Exec(createTb)
+	if err != nil {
+		log.Fatal("can't create table", err)
+	}
+
+	err = loadDeductions()
+	if err != nil {
+		log.Fatal("Failed to load deductions", err)
+	}
 
 	e := echo.New()
 	e.Use(middleware.Logger())
@@ -206,7 +260,7 @@ func main() {
 	e.GET("/", HealthCheckHandler)
 
 	t := e.Group("/tax/calculations")
-	t.POST("/", TaxCalculationsHandler)
+	t.POST("", TaxCalculationsHandler)
 	t.POST("/upload-csv", CSVTaxCalculationsHandler)
 
 	ad := e.Group("/admin/deductions")
@@ -214,6 +268,7 @@ func main() {
 	ad.POST("/personal", PersonalDeductionsHandler)
 	ad.POST("/k-receipt", KReceiptDeductionsHandler)
 
+	port := os.Getenv("PORT")
 	go func() {
 		if err := e.Start(":" + port); err != nil && err != http.ErrServerClosed {
 			e.Logger.Fatal("shutting down the server")
