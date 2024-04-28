@@ -210,8 +210,26 @@ func PersonalDeductionsHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, PersonalResponse{PersonalDeduction: PersonalDeduction})
 }
 
+type KReceiptResponse struct {
+	KReceiptDeductionLimit float64 `json:"kReceipt"`
+}
+
 func KReceiptDeductionsHandler(c echo.Context) error {
-	return c.JSON(http.StatusOK, "K-Receipt Deductions Adjustment")
+	var d Deduction
+	err := c.Bind(&d)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
+	}
+	if d.Amount > 100000 {
+		return c.JSON(http.StatusBadRequest, Err{Message: "K-Receipt deduction must not exceed 100,000"})
+	}
+	KReceiptDeductionLimit = d.Amount
+	_, err = db.Exec("UPDATE deductions SET kreceipt = $1 WHERE id = (SELECT MAX(id) FROM deductions)", KReceiptDeductionLimit)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, KReceiptResponse{KReceiptDeductionLimit: KReceiptDeductionLimit})
 }
 
 type CSVTaxResult struct {
