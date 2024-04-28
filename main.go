@@ -130,7 +130,7 @@ func CalculateTaxLevel(tax float64, wht float64) []TaxLevelDetail {
 }
 
 func CalculateTotalTax(totalIncome float64, wht float64, allowances []Allowance) (float64, error) {
-	totalAllowance := 60000.0 + CalculateAllowance(allowances)
+	totalAllowance := PersonalDeduction + CalculateAllowance(allowances)
 	grossIncome := totalIncome - totalAllowance
 	totalTax := 0.0
 
@@ -181,6 +181,9 @@ func PersonalDeductionsHandler(c echo.Context) error {
 	err := c.Bind(&d)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
+	}
+	if d.Amount > 100000 {
+		return c.JSON(http.StatusBadRequest, Err{Message: "Personal deduction must not exceed 100,000"})
 	}
 
 	PersonalDeduction = d.Amount

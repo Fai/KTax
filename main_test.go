@@ -23,18 +23,23 @@ func TestHealthCheck(t *testing.T) {
 
 func TestTaxCalculationsRoute(t *testing.T) {
 	e := echo.New()
-	state := TaxLevelToggle
-	TaxLevelToggle = false
 	req := httptest.NewRequest(http.MethodPost, "/tax/calculations", strings.NewReader(`{"totalIncome": 1000000, "wht": 0, "allowances": []}`))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
+	taxState := TaxLevelToggle
+	TaxLevelToggle = false
+
+	personalState := PersonalDeduction
+	PersonalDeduction = 60000.0
+
 	if assert.NoError(t, TaxCalculationsHandler(c)) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 		assert.Equal(t, "{\"tax\":101000}\n", rec.Body.String())
 	}
-	TaxLevelToggle = state
+	TaxLevelToggle = taxState
+	PersonalDeduction = personalState
 }
 
 func TestCalculateTax(t *testing.T) {
@@ -60,6 +65,9 @@ func TestCalculateTax(t *testing.T) {
 		{500000.0, 25000.0, []Allowance{}, 4000.0},
 	}
 
+	personalState := PersonalDeduction
+	PersonalDeduction = 60000.0
+
 	for _, tc := range testCases {
 		tax, err := CalculateTotalTax(tc.totalIncome, tc.wht, tc.allowances)
 		if err != nil {
@@ -70,4 +78,6 @@ func TestCalculateTax(t *testing.T) {
 			t.Errorf("Expected tax to be %.2f but got %.2f", tc.expectedTax, tax)
 		}
 	}
+
+	PersonalDeduction = personalState
 }
