@@ -237,7 +237,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n  \"amount\": 70000.0\n}",
+					"raw": "{\n  \"amount\": 60000.0\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -262,12 +262,32 @@
 		},
 		{
 			"name": "EXP06 Calculate tax from csv",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
 			"request": {
 				"method": "POST",
 				"header": [],
 				"body": {
-					"mode": "file",
-					"file": {}
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "file",
+							"type": "file",
+							"src": "test.csv"
+						}
+					]
 				},
 				"url": {
 					"raw": "http://localhost:8080/tax/calculations/upload-csv",
@@ -286,7 +306,21 @@
 			"response": []
 		},
 		{
-			"name": "EXP07 calculate tax with allowance and response with details",
+			"name": "EXP07 Calculate tax with allowance and response with details",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
 			"request": {
 				"method": "POST",
 				"header": [],
@@ -316,6 +350,20 @@
 		},
 		{
 			"name": "EXP08 Admin set k-receipt deduction",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
 			"request": {
 				"auth": {
 					"type": "basic",

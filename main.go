@@ -21,8 +21,22 @@ var TaxLevelToggle bool = true
 
 var db *sql.DB
 
-func HealthCheckHandler(c echo.Context) error {
-	return c.JSON(http.StatusOK, "Hello, Go Bootcamp!")
+var PersonalDeduction float64
+var KReceiptDeductionLimit float64
+
+func loadDeductions() error {
+	row := db.QueryRow("SELECT personal, receipt FROM deductions ORDER BY id DESC LIMIT 1")
+	err := row.Scan(&PersonalDeduction, &KReceiptDeductionLimit)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			PersonalDeduction = 60000.0
+			KReceiptDeductionLimit = 50000.0
+			_, err = db.Exec("INSERT INTO deductions (personal, receipt) VALUES ($1, $2)", PersonalDeduction, KReceiptDeductionLimit)
+		} else {
+			return err
+		}
+	}
+	return nil
 }
 
 type Err struct {
@@ -40,22 +54,36 @@ type IncomeStatement struct {
 	Allowances  []Allowance `json:"allowances"`
 }
 
-type TaxResult struct {
-	Tax float64 `json:"tax"`
-}
-
-type TaxRefund struct {
-	Refund float64 `json:"taxRefund"`
-}
-
 type TaxLevelDetail struct {
 	Level string  `json:"level"`
 	Tax   float64 `json:"tax"`
 }
 
+type TaxResult struct {
+	TotalIncome float64 `json:"totalIncome,omitempty"`
+	Tax         float64 `json:"tax,omitempty"`
+	TaxRefund   float64 `json:"taxRefund,omitempty"`
+}
+
 type DetailedTaxResult struct {
 	Tax    float64          `json:"tax"`
 	Levels []TaxLevelDetail `json:"levels"`
+}
+
+type Deduction struct {
+	Amount float64 `json:"amount"`
+}
+
+type PersonalResponse struct {
+	PersonalDeduction float64 `json:"personalDeduction"`
+}
+
+type KReceiptResponse struct {
+	KReceiptDeductionLimit float64 `json:"kReceipt"`
+}
+
+func HealthCheckHandler(c echo.Context) error {
+	return c.JSON(http.StatusOK, "Hello, Go Bootcamp!")
 }
 
 // TaxCalculationsHandler
@@ -77,12 +105,102 @@ func TaxCalculationsHandler(c echo.Context) error {
 	calculatedTax, err := CalculateTotalTax(i.TotalIncome, i.Wht, i.Allowances)
 	if calculatedTax < 0 {
 		calculatedTax *= -1
-		return c.JSON(http.StatusOK, TaxRefund{Refund: calculatedTax})
+		return c.JSON(http.StatusOK, TaxResult{TaxRefund: calculatedTax})
 	}
 	if TaxLevelToggle == true {
 		return c.JSON(http.StatusOK, DetailedTaxResult{Tax: calculatedTax, Levels: CalculateTaxLevel(calculatedTax, i.Wht)})
 	}
 	return c.JSON(http.StatusOK, TaxResult{Tax: calculatedTax})
+}
+
+func PersonalDeductionsHandler(c echo.Context) error {
+	var d Deduction
+	err := c.Bind(&d)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
+	}
+	if d.Amount > 100000 {
+		return c.JSON(http.StatusBadRequest, Err{Message: "Personal deduction must not exceed 100,000"})
+	}
+	if d.Amount < 60000 {
+		return c.JSON(http.StatusBadRequest, Err{Message: "Personal deduction must start from 60000"})
+	}
+
+	PersonalDeduction = d.Amount
+
+	_, err = db.Exec("UPDATE deductions SET personal = $1 WHERE id = (SELECT MAX(id) FROM deductions)", PersonalDeduction)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, PersonalResponse{PersonalDeduction: PersonalDeduction})
+}
+
+func KReceiptDeductionsHandler(c echo.Context) error {
+	var d Deduction
+	err := c.Bind(&d)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
+	}
+	if d.Amount > 100000 {
+		return c.JSON(http.StatusBadRequest, Err{Message: "K-Receipt deduction must not exceed 100,000"})
+	}
+	KReceiptDeductionLimit = d.Amount
+	_, err = db.Exec("UPDATE deductions SET receipt = $1 WHERE id = (SELECT MAX(id) FROM deductions)", KReceiptDeductionLimit)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, KReceiptResponse{KReceiptDeductionLimit: KReceiptDeductionLimit})
+}
+
+func CSVTaxCalculationsHandler(c echo.Context) error {
+	file, err := c.FormFile("file")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
+	}
+
+	src, err := file.Open()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
+	}
+	defer src.Close()
+
+	reader := csv.NewReader(src)
+	taxRecords, err := reader.ReadAll()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
+	}
+	taxRecords = taxRecords[1:]
+
+	var csvResult []TaxResult
+	var csvA []Allowance
+	for _, taxRecord := range taxRecords {
+		totalIncome, err := strconv.ParseFloat(taxRecord[0], 64)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
+		}
+		wht, err := strconv.ParseFloat(taxRecord[1], 64)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
+		}
+		donation, err := strconv.ParseFloat(taxRecord[2], 64)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
+		}
+		csvA = append(csvA, Allowance{AllowanceType: "donation", Amount: donation})
+		calculatedTax, err := CalculateTotalTax(totalIncome, wht, csvA)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
+		}
+		if calculatedTax < 0 {
+			csvResult = append(csvResult, TaxResult{TotalIncome: totalIncome, TaxRefund: calculatedTax * -1})
+		} else {
+			csvResult = append(csvResult, TaxResult{TotalIncome: totalIncome, Tax: calculatedTax})
+		}
+	}
+
+	return c.JSON(http.StatusOK, csvResult)
 }
 
 func CalculateAllowance(allowances []Allowance) float64 {
@@ -179,136 +297,11 @@ func CalculateTotalTax(totalIncome float64, wht float64, allowances []Allowance)
 	return totalTax, nil
 }
 
-type Deduction struct {
-	Amount float64 `json:"amount"`
-}
-
-type PersonalResponse struct {
-	PersonalDeduction float64 `json:"personalDeduction"`
-}
-
-func PersonalDeductionsHandler(c echo.Context) error {
-	var d Deduction
-	err := c.Bind(&d)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
-	}
-	if d.Amount > 100000 {
-		return c.JSON(http.StatusBadRequest, Err{Message: "Personal deduction must not exceed 100,000"})
-	}
-	if d.Amount < 60000 {
-		return c.JSON(http.StatusBadRequest, Err{Message: "Personal deduction must start from 60000"})
-	}
-
-	PersonalDeduction = d.Amount
-
-	_, err = db.Exec("UPDATE deductions SET personal = $1 WHERE id = (SELECT MAX(id) FROM deductions)", PersonalDeduction)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
-	}
-
-	return c.JSON(http.StatusOK, PersonalResponse{PersonalDeduction: PersonalDeduction})
-}
-
-type KReceiptResponse struct {
-	KReceiptDeductionLimit float64 `json:"kReceipt"`
-}
-
-func KReceiptDeductionsHandler(c echo.Context) error {
-	var d Deduction
-	err := c.Bind(&d)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
-	}
-	if d.Amount > 100000 {
-		return c.JSON(http.StatusBadRequest, Err{Message: "K-Receipt deduction must not exceed 100,000"})
-	}
-	KReceiptDeductionLimit = d.Amount
-	_, err = db.Exec("UPDATE deductions SET kreceipt = $1 WHERE id = (SELECT MAX(id) FROM deductions)", KReceiptDeductionLimit)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
-	}
-
-	return c.JSON(http.StatusOK, KReceiptResponse{KReceiptDeductionLimit: KReceiptDeductionLimit})
-}
-
-type CSVTaxResult struct {
-	TotalIncome float64 `json:"totalIncome"`
-	Tax         float64 `json:"tax,omitempty"`
-	TaxRefund   float64 `json:"taxRefund,omitempty"`
-}
-
-func CSVTaxCalculationsHandler(c echo.Context) error {
-	file, err := c.FormFile("file")
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
-	}
-
-	src, err := file.Open()
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
-	}
-	defer src.Close()
-
-	reader := csv.NewReader(src)
-	taxRecords, err := reader.ReadAll()
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
-	}
-	taxRecords = taxRecords[1:]
-
-	var csvResult []CSVTaxResult
-	var csvA []Allowance
-	for _, taxRecord := range taxRecords {
-		totalIncome, err := strconv.ParseFloat(taxRecord[0], 64)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
-		}
-		wht, err := strconv.ParseFloat(taxRecord[1], 64)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
-		}
-		donation, err := strconv.ParseFloat(taxRecord[2], 64)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
-		}
-		csvA = append(csvA, Allowance{AllowanceType: "donation", Amount: donation})
-		calculatedTax, err := CalculateTotalTax(totalIncome, wht, csvA)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
-		}
-		if calculatedTax < 0 {
-			csvResult = append(csvResult, CSVTaxResult{TotalIncome: totalIncome, TaxRefund: calculatedTax * -1})
-		} else {
-			csvResult = append(csvResult, CSVTaxResult{TotalIncome: totalIncome, Tax: calculatedTax})
-		}
-	}
-
-	return c.JSON(http.StatusOK, csvResult)
-}
-
 func AuthMiddleware(username, password string, c echo.Context) (bool, error) {
 	if username == os.Getenv("ADMIN_USERNAME") && password == os.Getenv("ADMIN_PASSWORD") {
 		return true, nil
 	}
 	return false, nil
-}
-
-var PersonalDeduction float64
-var KReceiptDeductionLimit float64
-
-func loadDeductions() error {
-	row := db.QueryRow("SELECT personal, kreceipt FROM deductions ORDER BY id DESC LIMIT 1")
-	err := row.Scan(&PersonalDeduction, &KReceiptDeductionLimit)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			PersonalDeduction = 60000.0
-			KReceiptDeductionLimit = 50000.0
-		} else {
-			return err
-		}
-	}
-	return nil
 }
 
 func main() {
@@ -324,7 +317,7 @@ func main() {
 		CREATE TABLE IF NOT EXISTS deductions (
 			id SERIAL PRIMARY KEY,
 			personal FLOAT,
-			kreceipt FLOAT
+			receipt FLOAT
 		);
 	`
 
