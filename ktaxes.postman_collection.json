@@ -245,7 +245,12 @@
 					}
 				},
 				"url": {
-					"raw": "/admin/deductions/personal",
+					"raw": "http://localhost:8080/admin/deductions/personal",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
 					"path": [
 						"admin",
 						"deductions",
@@ -265,11 +270,14 @@
 					"file": {}
 				},
 				"url": {
-					"raw": "tax/calculations/upload-csv",
+					"raw": "http://localhost:8080/tax/calculations/upload-csv",
+					"protocol": "http",
 					"host": [
-						"tax"
+						"localhost"
 					],
+					"port": "8080",
 					"path": [
+						"tax",
 						"calculations",
 						"upload-csv"
 					]
@@ -336,7 +344,12 @@
 					}
 				},
 				"url": {
-					"raw": "/admin/deductions/k-receipt",
+					"raw": "http://localhost:8080/admin/deductions/k-receipt",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
 					"path": [
 						"admin",
 						"deductions",
