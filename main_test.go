@@ -5,7 +5,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"io"
-	"io/ioutil"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -91,35 +90,37 @@ func TestCalculateTax(t *testing.T) {
 func TestCSVTaxCalculationsHandler(t *testing.T) {
 	e := echo.New()
 
-	fileContent := "1000000,0\n2000000,0\n"
-	tmpfile, err := ioutil.TempFile("", "example.csv")
+	fileContent := "totalIncome,wht,donation\n500000,0,0\n600000,40000,20000\n750000,50000,15000\n"
+	temp, err := os.CreateTemp("./", "test-*.csv")
 	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-	if _, err := tmpfile.Write([]byte(fileContent)); err != nil {
-		t.Fatal(err)
-	}
-	if err := tmpfile.Close(); err != nil {
 		t.Fatal(err)
 	}
 
-	file, err := os.Open(tmpfile.Name())
+	if _, err := temp.Write([]byte(fileContent)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := temp.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	file, err := os.Open(temp.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer file.Close()
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	part, err := writer.CreateFormFile("file", filepath.Base(tmpfile.Name()))
+	part, err := writer.CreateFormFile("file", filepath.Base(temp.Name()))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	_, err = io.Copy(part, file)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	err = writer.Close()
 	if err != nil {
 		t.Fatal(err)
@@ -132,5 +133,15 @@ func TestCSVTaxCalculationsHandler(t *testing.T) {
 
 	if assert.NoError(t, CSVTaxCalculationsHandler(c)) {
 		assert.Equal(t, http.StatusOK, rec.Code)
+	}
+
+	err = file.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = os.Remove(temp.Name())
+	if err != nil {
+		t.Fatal(err)
 	}
 }

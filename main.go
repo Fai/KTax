@@ -211,40 +211,53 @@ func CSVTaxCalculationsHandler(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
 	}
 
-	// Open the file
 	src, err := file.Open()
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
 	}
 	defer src.Close()
 
-	// Read the file as a CSV
 	reader := csv.NewReader(src)
-	records, err := reader.ReadAll()
+	taxRecords, err := reader.ReadAll()
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
 	}
+	taxRecords = taxRecords[1:]
 
-	// Process each row
-	var results []TaxResult
-	for _, record := range records {
-		totalIncome, err := strconv.ParseFloat(record[0], 64)
+	var csvResult []map[string]interface {
+	}
+	var csvA []Allowance
+	for _, taxRecord := range taxRecords {
+		totalIncome, err := strconv.ParseFloat(taxRecord[0], 64)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
 		}
-		wht, err := strconv.ParseFloat(record[1], 64)
+		result := map[string]interface{}{
+			"totalIncome": totalIncome,
+		}
+		wht, err := strconv.ParseFloat(taxRecord[1], 64)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
 		}
-		calculatedTax, err := CalculateTotalTax(totalIncome, wht, nil)
+		donation, err := strconv.ParseFloat(taxRecord[2], 64)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
 		}
-		results = append(results, TaxResult{Tax: calculatedTax})
+		csvA = append(csvA, Allowance{AllowanceType: "donation", Amount: donation})
+		calculatedTax, err := CalculateTotalTax(totalIncome, wht, csvA)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, Err{Message: err.Error()})
+		}
+		if calculatedTax < 0 {
+			calculatedTax *= -1
+			result["taxRefund"] = calculatedTax
+		} else {
+			result["tax"] = calculatedTax
+		}
+		csvResult = append(csvResult, result)
 	}
 
-	// Return the results
-	return c.JSON(http.StatusOK, "Tax Calculations from CSV file")
+	return c.JSON(http.StatusOK, csvResult)
 }
 
 func AuthMiddleware(username, password string, c echo.Context) (bool, error) {
